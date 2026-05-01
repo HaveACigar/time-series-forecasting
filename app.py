@@ -13,17 +13,30 @@ st.set_page_config(
 
 TEMPLATE = "plotly_dark"
 
-TAB_TAKEAWAYS = {
-    "overview": "The time-series baseline highlights demand volatility and trend direction, shaping planning assumptions before capital is committed.",
-    "model_comparison": "Model error comparison quantifies forecast risk so leadership can choose planning buffers with confidence.",
-    "backtest": "Holdout performance reveals where forecast misses are likely, helping finance and operations pre-position mitigation actions.",
-    "forecast": "Scenario trajectories provide a forward-looking view of demand range, supporting budget, staffing, and inventory decisions.",
-    "importance": "Feature importance shows which temporal drivers matter most, informing where additional data collection improves decision quality.",
-}
+def build_takeaways(metrics: dict, meta: dict) -> dict:
+    results_df = (
+        pd.DataFrame(metrics)
+        .T.reset_index()
+        .rename(columns={"index": "Model"})
+        .sort_values("RMSE", ascending=True)
+    )
+    best = results_df.iloc[0]
+    worst = results_df.iloc[-1]
+    rmse_gap = float(worst["RMSE"] - best["RMSE"]) if len(results_df) > 1 else 0.0
+    horizon = int(meta.get("horizon", 0) or 0)
+    dataset_name = meta.get("dataset_name", "the selected dataset")
+
+    return {
+        "overview": f"Using {dataset_name}, this baseline defines the demand trajectory leadership should anchor planning assumptions on.",
+        "model_comparison": f"Best model is {best['Model']} at RMSE {best['RMSE']:.3f}; model choice changes error by {rmse_gap:.3f} RMSE versus the weakest option.",
+        "backtest": f"Holdout diagnostics across {horizon} periods highlight where misses are likely so finance and operations can prepare contingency actions.",
+        "forecast": "Forward trajectories expose planning range and uncertainty bands, helping teams set budget and capacity with clearer risk awareness.",
+        "importance": "Temporal feature ranking identifies which lag and seasonality signals drive projections, guiding where additional data will improve forecast reliability.",
+    }
 
 
-def render_takeaway(key: str) -> None:
-    st.info(f"Shareholder Takeaway: {TAB_TAKEAWAYS[key]}")
+def render_takeaway(key: str, takeaways: dict) -> None:
+    st.info(f"Shareholder Takeaway: {takeaways[key]}")
 
 
 @st.cache_resource
@@ -132,6 +145,7 @@ def main():
 
     arts = load_artifacts()
     meta = arts.get("dataset_meta", {})
+    takeaways = build_takeaways(arts["metrics"], meta)
     st.markdown(
         f"Dataset source: {meta.get('dataset_name', 'Unknown')} | "
         f"Series: {meta.get('series_id', 'N/A')} | "
@@ -147,16 +161,16 @@ def main():
     ])
 
     with tabs[0]:
-        render_takeaway("overview")
+        render_takeaway("overview", takeaways)
         render_overview(arts["series"], arts["metrics"], meta)
     with tabs[1]:
-        render_takeaway("model_comparison")
+        render_takeaway("model_comparison", takeaways)
         render_model_comparison(arts["metrics"], meta)
     with tabs[2]:
-        render_takeaway("backtest")
+        render_takeaway("backtest", takeaways)
         render_backtest_chart(arts["test_index"], arts["y_true"], arts["preds"])
     with tabs[3]:
-        render_takeaway("forecast")
+        render_takeaway("forecast", takeaways)
         render_forecast(
             arts["series"],
             arts["future_index"],
@@ -165,7 +179,7 @@ def main():
             arts["forecast_xgb"],
         )
     with tabs[4]:
-        render_takeaway("importance")
+        render_takeaway("importance", takeaways)
         render_xgb_importance(arts["xgb_feature_importance"])
 
 

@@ -13,6 +13,18 @@ st.set_page_config(
 
 TEMPLATE = "plotly_dark"
 
+TAB_TAKEAWAYS = {
+    "overview": "The time-series baseline highlights demand volatility and trend direction, shaping planning assumptions before capital is committed.",
+    "model_comparison": "Model error comparison quantifies forecast risk so leadership can choose planning buffers with confidence.",
+    "backtest": "Holdout performance reveals where forecast misses are likely, helping finance and operations pre-position mitigation actions.",
+    "forecast": "Scenario trajectories provide a forward-looking view of demand range, supporting budget, staffing, and inventory decisions.",
+    "importance": "Feature importance shows which temporal drivers matter most, informing where additional data collection improves decision quality.",
+}
+
+
+def render_takeaway(key: str) -> None:
+    st.info(f"Shareholder Takeaway: {TAB_TAKEAWAYS[key]}")
+
 
 @st.cache_resource
 def load_artifacts():
@@ -135,12 +147,16 @@ def main():
     ])
 
     with tabs[0]:
+        render_takeaway("overview")
         render_overview(arts["series"], arts["metrics"], meta)
     with tabs[1]:
+        render_takeaway("model_comparison")
         render_model_comparison(arts["metrics"], meta)
     with tabs[2]:
+        render_takeaway("backtest")
         render_backtest_chart(arts["test_index"], arts["y_true"], arts["preds"])
     with tabs[3]:
+        render_takeaway("forecast")
         render_forecast(
             arts["series"],
             arts["future_index"],
@@ -149,6 +165,7 @@ def main():
             arts["forecast_xgb"],
         )
     with tabs[4]:
+        render_takeaway("importance")
         render_xgb_importance(arts["xgb_feature_importance"])
 
 

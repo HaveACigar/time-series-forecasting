@@ -13,6 +13,52 @@ st.set_page_config(
 
 TEMPLATE = "plotly_dark"
 
+
+def render_summary_cards(cards: list[dict]) -> None:
+    cols = st.columns(len(cards))
+    for col, card in zip(cols, cards):
+        with col:
+            st.markdown(
+                f"""
+                <div style="
+                    padding: 0.2rem 0.1rem 0.75rem 0.1rem;
+                    min-height: 120px;
+                ">
+                  <div style="
+                      font-size: 0.95rem;
+                      color: rgba(250,250,250,0.82);
+                      margin-bottom: 0.5rem;
+                  ">{card['label']}</div>
+                  <div style="
+                      font-size: 2.0rem;
+                      font-weight: 700;
+                      line-height: 1.08;
+                      word-break: break-word;
+                      overflow-wrap: anywhere;
+                  ">{card['value']}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+
+def render_lag_explainer(meta: dict) -> None:
+    dataset_name = meta.get("dataset_name", "this dataset")
+    with st.expander("What lag features mean in this forecast", expanded=False):
+        st.markdown(
+            f"""
+For {dataset_name}, a lag feature means "the value from an earlier month" used as an input for the next prediction.
+
+- `lag_1`: the previous month's value
+- `lag_2`: the value from two months ago
+- `lag_3`: the value from three months ago
+- `lag_6`: the value from six months ago
+- `lag_12`: the value from the same month one year earlier
+
+In this app, lags help XGBoost learn short-term momentum and yearly seasonality. For a monthly series like M4 Monthly, `lag_12` is especially useful because it gives the model the last observation from the same season one year ago.
+            """
+        )
+
 def build_takeaways(metrics: dict, meta: dict) -> dict:
     results_df = (
         pd.DataFrame(metrics)
@@ -46,12 +92,15 @@ def load_artifacts():
 
 def render_overview(series, metrics, meta):
     st.subheader("Project Overview")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Dataset", meta.get("dataset_name", "Unknown"))
-    c2.metric("Series", meta.get("series_id", "N/A"))
-    c3.metric("History Length", f"{len(series)} months")
     best_model = min(metrics.keys(), key=lambda k: metrics[k]["RMSE"])
-    c4.metric("Best RMSE", f"{best_model} ({metrics[best_model]['RMSE']})")
+    render_summary_cards([
+        {"label": "Dataset", "value": meta.get("dataset_name", "Unknown")},
+        {"label": "Series", "value": meta.get("series_id", "N/A")},
+        {"label": "History Length", "value": f"{len(series)} months"},
+        {"label": "Best RMSE", "value": f"{best_model} ({metrics[best_model]['RMSE']:.3f})"},
+    ])
+
+    render_lag_explainer(meta)
 
     fig = px.line(
         x=series.index,
@@ -124,6 +173,7 @@ def render_forecast(series, future_index, fc_naive, fc_hw, fc_xgb):
 
 def render_xgb_importance(importance_df):
     st.subheader("XGBoost Feature Importance")
+    st.caption("Lag features use prior monthly values to help the model recognize momentum and recurring yearly patterns.")
     top = importance_df.head(15)
     fig = px.bar(
         top,

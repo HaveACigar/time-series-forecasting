@@ -1,5 +1,4 @@
 import joblib
-import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -20,11 +19,11 @@ def load_artifacts():
     return joblib.load("models/artifacts.pkl")
 
 
-def render_overview(series, metrics):
+def render_overview(series, metrics, meta):
     st.subheader("Project Overview")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Dataset", "Atmospheric CO2")
-    c2.metric("Frequency", "Monthly")
+    c1.metric("Dataset", meta.get("dataset_name", "Unknown"))
+    c2.metric("Series", meta.get("series_id", "N/A"))
     c3.metric("History Length", f"{len(series)} months")
     best_model = min(metrics.keys(), key=lambda k: metrics[k]["RMSE"])
     c4.metric("Best RMSE", f"{best_model} ({metrics[best_model]['RMSE']})")
@@ -32,15 +31,16 @@ def render_overview(series, metrics):
     fig = px.line(
         x=series.index,
         y=series.values,
-        labels={"x": "Date", "y": "CO2"},
-        title="Historical CO2 Time Series",
+        labels={"x": "Date", "y": "Value"},
+        title="Historical Time Series",
         template=TEMPLATE,
     )
     st.plotly_chart(fig, use_container_width=True)
 
 
-def render_model_comparison(metrics):
-    st.subheader("Walk-Forward Backtesting (12 months)")
+def render_model_comparison(metrics, meta):
+    st.subheader("Holdout Evaluation")
+    st.caption(f"Holdout horizon: {meta.get('horizon', '-') } months")
     df = pd.DataFrame(metrics).T.reset_index().rename(columns={"index": "Model"})
     st.dataframe(df.style.format({"MAE": "{:.3f}", "RMSE": "{:.3f}", "sMAPE": "{:.3f}%"}), use_container_width=True, hide_index=True)
 
@@ -58,15 +58,15 @@ def render_model_comparison(metrics):
 
 
 def render_backtest_chart(test_index, y_true, preds):
-    st.subheader("Backtest: Actual vs Predicted")
+    st.subheader("Holdout: Actual vs Predicted")
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=test_index, y=y_true, mode="lines+markers", name="Actual", line=dict(width=3)))
     for name, p in preds.items():
         fig.add_trace(go.Scatter(x=test_index, y=p, mode="lines+markers", name=name))
     fig.update_layout(
-        title="12-Month Holdout Predictions",
+        title="Holdout Predictions",
         xaxis_title="Date",
-        yaxis_title="CO2",
+        yaxis_title="Value",
         template=TEMPLATE,
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -91,7 +91,7 @@ def render_forecast(series, future_index, fc_naive, fc_hw, fc_xgb):
     fig.update_layout(
         title="Future Forecasts by Model",
         xaxis_title="Date",
-        yaxis_title="CO2",
+        yaxis_title="Value",
         template=TEMPLATE,
     )
     st.plotly_chart(fig, use_container_width=True)
@@ -117,13 +117,14 @@ def render_xgb_importance(importance_df):
 
 def main():
     st.title("📈 Time Series Forecasting")
-    st.markdown(
-        "**Pipeline:** monthly CO2 forecasting with three model families: "
-        "Seasonal Naive, Holt-Winters, and XGBoost with lag/calendar features. "
-        "Includes walk-forward backtesting and multi-horizon forecast visualization."
-    )
 
     arts = load_artifacts()
+    meta = arts.get("dataset_meta", {})
+    st.markdown(
+        f"Dataset source: {meta.get('dataset_name', 'Unknown')} | "
+        f"Series: {meta.get('series_id', 'N/A')} | "
+        f"Mode: {meta.get('source', 'unknown')}"
+    )
 
     tabs = st.tabs([
         "Overview",
@@ -134,9 +135,9 @@ def main():
     ])
 
     with tabs[0]:
-        render_overview(arts["series"], arts["metrics"])
+        render_overview(arts["series"], arts["metrics"], meta)
     with tabs[1]:
-        render_model_comparison(arts["metrics"])
+        render_model_comparison(arts["metrics"], meta)
     with tabs[2]:
         render_backtest_chart(arts["test_index"], arts["y_true"], arts["preds"])
     with tabs[3]:
